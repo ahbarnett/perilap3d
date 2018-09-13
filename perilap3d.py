@@ -1,4 +1,4 @@
-# 3D electrostatic triply-periodic dipole sum, python+numpy+numba version.
+# 3D electrostatic triply-periodic dipole sum. python module, w/ numpy+numba.
 # Alex Barnett, Sept 2018. Potential collab w/ Gabor Csanyi.
 
 import numpy as np
@@ -12,30 +12,26 @@ import matplotlib.pyplot as pl
 from mpl_toolkits.mplot3d import Axes3D
 import myplotutils
 
-def slicepts(z0=0.0,a=2.0):
-    """return n*3 array of pts on a square slice z=z0, size a*a in xy plane
-    Used for 3d plotting.
-    """
-    gr = np.linspace(a,a,num=200)    # targets: grid size per dim
-    xx,yy = np.meshgrid(gr,gr)
-    nt = xx.size
-    return np.hstack((xx.ravel()[:,None], yy.ravel()[:,None], z0*np.ones([nt,1]))), xx, yy
-
 class lap3d3p:
-    """Triply-periodic 3D Laplace class. Depends on lap3dkernels.
+    """Laplace 3D Triply-periodic class. Needs: lap3dkernels, myplotutils
 
-    initialize w/ lat : 3x3 matrix, each row is a lattice vector (right-handed)
-    
+    Inputs:
+      lat - 3x3 matrix, each row is a lattice vector (right-handed)
+      verb - (integer, optional) verbosity: 0 silent, 1 text
+ 
+    See: test_lap3d3p() below
+
     Issues: * annoying "self hell", not sure of struct vs class style
     """
-    def __init__(self,lat):
+    def __init__(self,lat,verb=1):
         # attributes supposed to list here (annoying; I don't). some defaults
         self.lat = lat
         self.ilat = la.inv(lat)        # cols are recip vectors
         self.nors = self.ilat.T.copy() # since each col gives a normal direc
         for i in range(3):
             self.nors[i] = self.nors[i]/norm(self.nors[i])   # normalize row
-        print('lap3d3p init: cond # unit cell = %.3g'%(cond(lat)))
+        if verb:
+            print('lap3d3p init: cond # unit cell = %.3g'%(cond(lat)))
         self.badness = max(1.4,cond(lat))
         if self.badness>10:
             print('unit cell bad aspect ratio: will be slow & bad!')
@@ -59,7 +55,7 @@ class lap3d3p:
         ax = fig.gca(projection='3d',aspect='equal')  # equal fails here
         ax.set_xlabel('x'); ax.set_ylabel('y'); ax.set_zlabel('z')
         l=1.0; ax.set_xlim(-l,l); ax.set_ylim(-l,l); ax.set_zlim(-l,l) # hack
-        ax.scatter(0,0,0,color='k')
+        #ax.scatter(0,0,0,color='k')  # origin
         for d in range(3):  # plot wireframe of lattice cell lat on axes ax
             for i in range(2):
                 for j in range(2):
@@ -84,6 +80,8 @@ class lap3d3p:
         if self.p is not None:   # aux src pts
             ax.scatter(self.p[:,0],self.p[:,1],self.p[:,2],s=1,color='r')
 
+        ax.set_title('unit cell, face names & normals, face colloc pts')
+        pl.show()
         return ax
             
     def UCsurfpts(self,m,grid='u'):
@@ -113,13 +111,14 @@ class lap3d3p:
                 pts[d,i,:,:] = r.dot(self.lat)      # transform to lattice
         return pts, nors
 
-    def precomp(self,tol=1e-3,proxytype='s',facmeth='s'):
+    def precomp(self,tol=1e-3,proxytype='s',facmeth='s',verb=1):
         """Periodizing setup and Q factorization.
         Optionally can set:
           tol : tolerance, ie desired relative precision.  *** not yet used
           proxytype - 's' (charges) or 'd' (dipoles), for aux rep
           facmeth - Q factorization: 's' for SVD, 'q' for QR, 'p' for pivoted QR
                                      '' for don't factor, use LSQ solve in eval.
+          verb - (integer) verbosity: 0 silent, 1 text, 2 and figs,...
         """
         self.tol=tol
         self.proxytype=proxytype
@@ -134,20 +133,24 @@ class lap3d3p:
         self.Np = 6*p.shape[2]   # num aux (proxy) pts
         self.p = self.scale * p.reshape([self.Np,3]) # gather all pts together
         self.pn = pn.reshape([self.Np,3])
-        print('precomp: m=%d per face side, P=%d per proxy side'%(self.m,P))
+        if verb:
+            print('precomp: m=%d per face side, P=%d per proxy side'%(self.m,P))
         
         t0=tic()         # setup periodizing matrix & factorized inverse...
         self.fillQ()     # keeps Q around as an attribute
-        print('Q size %d*%d, fill time %.3g s'%(self.Q.shape[0],self.Q.shape[1],tic()-t0))
+        if verb:
+            print('Q size %d*%d, fill time %.3g s. factorizing...'%(self.Q.shape[0],self.Q.shape[1],tic()-t0))
         t0=tic(); self.facmeth=facmeth
         if facmeth=='q':
             self.QfacQ,R = la.qr(self.Q,mode='economic')   # no pivoting, fast
             self.invR = la.inv(R)
-            print('QR + inv(R) time %.3g s, norm(invR)=%.3g'%(tic()-t0,norm(self.invR)))
+            if verb:
+                print('QR + inv(R) time %.3g s, norm(invR)=%.3g'%(tic()-t0,norm(self.invR)))
         elif facmeth=='p':    # pivoted QR is 4x slower vs QR! (true in matlab)
             self.QfacQ,R,self.Qperm = la.qr(self.Q,mode='economic',pivoting=True)
             self.invR = la.inv(R)
-            print('piv-QR + inv(R) time %.3g s, norm(invR)=%.3g'%(tic()-t0,norm(self.invR)))
+            if verb:
+                print('piv-QR + inv(R) time %.3g s, norm(invR)=%.3g'%(tic()-t0,norm(self.invR)))
             #print(self.invR)  # guess mult by invR will be bkw stable, good.
         else:        # use SVD: observe smaller soln norms, even if best
             U,svals,Vh = la.svd(self.Q,full_matrices=False,check_finite=False)
@@ -156,7 +159,8 @@ class lap3d3p:
             isvals[svals<cutoff*svals[0]] = 0.0    # truncated pinv
             self.QfacSUh = isvals[:,None] * U.T.conj()    # combine 2 factors
             self.QfacV = Vh.T.conj()            # Hermitian transpose
-            print('SVD time %.3g s'%(tic()-t0))
+            if verb:
+                print('SVD time %.3g s'%(tic()-t0))
 
     def fillQ(self):
         """fill quasiperiodizing 6m^2-by-Np matrix commonly called Q, in self.
@@ -179,6 +183,7 @@ class lap3d3p:
                 print('proxytype',self.proxytype,'unknown!')
             self.Q = np.vstack([self.Q,Qp-Qm,Qnp-Qnm])
 
+    # uncomment following line only for line_profiler via kernprof...
     #@profile
     def eval(self,y,d,x,verb=0):
         """Evaluate triply-periodic Laplace 3D dipole sum at non-self targets.
@@ -222,7 +227,7 @@ class lap3d3p:
             dnf = np.sum(self.cn[f,0,:,:]*gf,axis=1)   # n-deriv = grad dot nor
             discrep = np.hstack([discrep,df,dnf])
         if verb:
-            print('\tdiscrep time\t\t\t\t%.3g ms'%(1e3*(tic()-t0)))
+            print('\tdiscrep eval\t\t\t\t%.3g ms'%(1e3*(tic()-t0)))
 
         discrep = -discrep     # since BVP solve aims to cancel discrep
         t0=tic() # solve Q.xi = discrep,  for aux strengths xi...
@@ -249,7 +254,7 @@ class lap3d3p:
         else:
             l3k.lap3ddipole_numba(self.p,xi[:,None]*self.pn,x,pot,grad,add=True)
         if verb:
-            print('\taux rep eval at targs in \t\t%.3g ms'%(1e3*(tic()-t0)))
+            print('\taux rep eval at targs\t\t%.3g ms'%(1e3*(tic()-t0)))
             print('\ttotal eval time: \t\t\t%.3g ms'%(1e3*(tic()-t1)))
 
         if verb>1:       # plot all near src, all targs...
@@ -257,75 +262,77 @@ class lap3d3p:
             pl.gca().scatter(x[:,0],x[:,1],x[:,2],color='g',s=3)
 
         return pot, grad
-        
-# ==== main
-l3k.warmup()
-verb = 1     # 1 for text, 2 for text+pic
-L = array([[1,0,0],[0.3,1,0],[-0.2,0.3,0.9]])  # define close-cube lattice vecs
-#L = eye(3)        # cubical (best-case) lattice
-p = lap3d3p(L)     # make a periodizing object
-p.precomp(tol=1e-3,facmeth='s')           # doesn't need the src pts
-if verb>1:
-    pl.ion(); ax=p.show()     # plot it
-ns = 1000                        # sources & targs
-random.seed(seed=0)
-x = (random.rand(ns,3)-1/2)
-xjit = array([.03,.02,-.01])     # some targs not quite at corners
-x[0:4,:] = np.vstack([zeros(3),eye(3)]) - 1/2 + xjit  # 4 targs that check peri
-x[0:8,:] = np.vstack([zeros(3),eye(3),1-eye(3),ones(3)]) - 1/2  # 8 targs that check peri
-x = x.dot(L)         # xform to lattice
-y = (random.rand(ns,3)-1/2).dot(L)    # in [-1/2,1/2]^3 transformed
-d = random.randn(ns,3)
-t0=tic(); reps=10
-for i in range(reps):
-    u,g = p.eval(y,d,x)
-teval=(tic()-t0)/reps
-print('3d3p mean eval time = %.3g s'%(teval))
-print(u[0:8])     # show just peri-checking pots
-#print(g[0:8])     # show just peri-checking field vals
-print('max corner pot periodicity err: %.3g'%(np.max(np.abs(u[0]-u[1:8]))))
-print('max corner grad peri rel err: %.3g'%(np.max(np.abs(g[0]-g[1:8]))/norm(g[0])))
-u,g = p.eval(y,d,x,verb)   # maybe make a pic
-t0=tic()
-for i in range(reps):
-    l3k.lap3ddipole_numba(y,d,x,u,g)
-tnonper=(tic()-t0)/reps
-print('cf non-per eval time %.3g ms (ratio: %.3g)'%(1e3*tnonper,teval/tnonper))
 
-# results: around 20-40x slower than non-periodic case, for ns=nt=500-1000
+def test_lap3d3p(tol=1e-3,verb=1):
+    """Tester and performance for lap3d3p (Laplace 3D triply-periodic) class.
+    Optional inputs:
+       tol - requested tolerance
+       verb - verbosity: 1 for text, 2 for text+pictures
+    """
+    l3k.warmup()
+    random.seed(seed=0)
+    L = array([[1,0,0],[0.3,1,0],[-0.2,0.3,0.9]])  # rows are lattice vecs
+    #L = eye(3)        # cubical (best-case) lattice
+    p = lap3d3p(L)     # make a periodizing object
+    p.precomp(tol)     # doesn't need the src pts
+    if verb>1:
+        pl.ion(); ax=p.show()     # plot it
+    ns = 500                      # sources
+    y = (random.rand(ns,3)-1/2).dot(L)    # in [-1/2,1/2]^3 then xform to latt
+    d = random.randn(ns,3)        # dipole strength vectors
+    x = (random.rand(ns,3)-1/2).dot(L)   # same num of new targets
+    # change the first 8 targs to the corners, to check periodicity...
+    x[0:8,:] = (np.vstack([zeros(3),eye(3),1-eye(3),ones(3)]) - 1/2).dot(L)
+    reps=10       # time the eval (jits have been warmed up)...
+    t0=tic()
+    for i in range(reps):
+        u,g = p.eval(y,d,x)
+    teval=(tic()-t0)/reps
+    print('3d3p eval time = %.3g ms'%(1e3*teval))
+    #print(u[0:8])     # peri-checking pot vals - NB arbitrary constant offset
+    #print(g[0:8])     # peri-checking field vals
+    print('max corner pot peri abs err: %.3g'%(np.max(u[0:8])-np.min(u[0:8])))
+    print('max corner grad peri rel err: %.3g'%(np.max(np.abs(g[0]-g[1:8]))/norm(g[0])))
+    if verb>0:
+        u,g = p.eval(y,d,x,verb)   # maybe report more info?
+    t0=tic()      # time the free-space eval...
+    for i in range(reps):
+        l3k.lap3ddipole_numba(y,d,x,u,g)
+    tnonper=(tic()-t0)/reps
+    print('cf non-per eval time %.3g ms (ratio: %.3g)'%(1e3*tnonper,teval/tnonper))
 
-# need to check: convergence, effort scaling w/ tol, and w/ N
+#def convtest_lap3d3p():
 
-if 0: # eval and plot a slice
-    ns = 300                        # sources
-    y = random.rand(ns,3)-0.5    # in [-1/2,1/2]^3
-    d = random.randn(ns,3)
-    z0=0.3; gmax=1.0                 # slice z, extent
-    x,xx,yy = slicepts(z0=z0,a=gmax)
-    nt = x.shape[0]
-    u = zeros(nt)    # numba version writes outputs to arguments
-    g = zeros([nt,3])
-    l3k.lap3ddipole_numba(y,d,x,u,g)
+    
+def slicepts(z0=0.0,a=2.0,m=200):
+    """return n*3 array of pts on a square slice z=z0, size a*a in xy plane
+    Used for 3d plotting. n=m^2, where m is optional argument.
+    """
+    gr = np.linspace(-a,a,num=m)    # targets: grid size per dim
+    xx,yy = np.meshgrid(gr,gr)
+    nt = xx.size
+    return np.hstack((xx.ravel()[:,None], yy.ravel()[:,None], z0*np.ones([nt,1]))), xx, yy
 
-sc = 10   # colorscale
-pl.ion()    # forks the plot so ipython still interactive
-if 0:            # 2d image
+def show_perislice(tol=1e-3):
+    """eval on a xformed slice through unit cell, plot image, viz check periodic
+    """
+    L = array([[1,0,0],[0.3,1,0],[-0.2,0.3,0.9]])  # rows are lattice vecs
+    p = lap3d3p(L)
+    p.precomp(1e-3,verb=0)
+    ns = 100                              # sources
+    y = (random.rand(ns,3)-1/2).dot(L)    # in [-1/2,1/2]^3 then xform to latt
+    d = random.randn(ns,3)                # dipole strength vectors
+    x,xx,yy = slicepts(z0=0.3,a=0.5)
+    x = x.dot(L)                          # xform targs to lattice
+    pot,grad = p.eval(y,d,x)
+    pot -= np.mean(pot)                   # since arbitrary offset
+
+    pot3x3 = np.tile(pot.reshape(xx.shape), (3,3))
+    c = 20   # colorscale
     fig,ax = pl.subplots()
-    #pl.figure()   # new fig
-    im = ax.imshow(u.reshape(xx.shape),cmap='jet',vmin=-sc,vmax=sc,extent=(-gmax,gmax,-gmax,gmax))
-    ax.set_xlabel('x'); ax.set_ylabel('y')
-    #fig.colorbar(im)
-    myplotutils.myshow(ax,im,fig)
-    #myplotutils.goodcolorbar(im)   # acts on the image
-    #pl.show()   # only needed if pl.ioff(), equiv of drawnow
-    # can then close with pl.close(1)  etc
-
-if 0: # do 3d slice plot
-    fig = pl.figure()   # new fig
-    ax = fig.gca(projection='3d',aspect='equal')
-    pts = ax.scatter(xs=y[:,0],ys=y[:,1],zs=y[:,2],s=1)
-    usc = (u.reshape(xx.shape)+sc)/(2*sc)   # scale to [0,1] for cmap
-    # replace by x coords?
-    slice = ax.plot_surface(xx,yy,0*xx+z0,facecolors=pl.cm.jet(usc))
-    ax.set_xlabel('x'); ax.set_ylabel('y'); ax.set_zlabel('z')
-
+    im = ax.imshow(pot3x3,cmap='jet',vmin=-c,vmax=c,extent=(-3/2,3/2,-3/2,3/2))
+    ax.set_xlabel('x_1 for std UC'); ax.set_ylabel('x_2 for std UC')
+    ax.set_title('3x3 copy of x_3-slice, as if std UC; should join smoothly')
+    # fig.colorbar(im)  # if no interaction wanted, or:
+    myplotutils.myshow(ax,im,fig)   # drag and drag colorbar
+    pl.show()   # equiv of drawnow

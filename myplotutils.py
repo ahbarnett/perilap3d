@@ -239,7 +239,7 @@ def myshow(ax,im=None,fig=None):
     zp.zoom_factory(ax)
     zp.pan_factory(ax)
     if im!=None:
-        cbar = fig.colorbar(im)
+        cbar = fig.colorbar(im,aspect=8)
         cbar = DraggableColorbar(cbar,im)
         cbar.connect()
     pl.show()
@@ -263,7 +263,7 @@ def demo_DraggableColorbar():
     #pl.ion()     # seems to stop dragging working!
     fig,ax = pl.subplots()
     im = pl.imshow(a,cmap='jet')
-    cbar = fig.colorbar(im)
+    cbar = fig.colorbar(im,aspect=8)
     cbar = DraggableColorbar(cbar,im)
     cbar.connect()
     pl.show()
@@ -280,7 +280,7 @@ def demo_ZoomPanColorbar():
     mpl.rcParams['toolbar'] = 'None'
     fig,ax = pl.subplots()
     im = pl.imshow(a,cmap='jet')
-    cbar = fig.colorbar(im)
+    cbar = fig.colorbar(im,aspect=8)
     cbar = DraggableColorbar(cbar,im)
     cbar.connect()
     zp = ZoomPan()

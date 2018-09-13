@@ -1,4 +1,4 @@
-# Laplace 3D monopole & dipole direct naive summation kernel module.
+# Laplace 3D monopole & dipole free-space direct summation kernel module.
 # pure python and numba-jit versions (making module keeps jits around; yay).
 # Barnett 9/12/18
 
@@ -412,7 +412,7 @@ def test_lap3dmats():
     print('dip mat pot err nrm = ', norm(u[:,None] - ufrommat))
     gfrommat = An @ np.ones([ns,1])   # grad from unit dipstrs
     gdote = np.sum(g*e,axis=1)[:,None]   # e-direc derivs
-    print('dip mat n-grad err nrm = ', norm(gdote - gfrommat))
+    print('dip mat n-grad err nrm = ', norm(gdote - gfrommat),'\n')
 
 def checkgrad(x,f,Df):
     """
@@ -449,6 +449,7 @@ def test_checkgrad():
 def warmup():
     """Warm-up (compile) the numba jits for little (n>1 needed) cases
     """
+    print('lap3dkernels: wait for numba jit compiles...')
     n=10; y = random.rand(n,3); q=random.rand(n)
     d = 1*y; x=-1*y; g = 0*x; u=0*x[:,0]
     t0=tic()
@@ -460,7 +461,7 @@ def warmup():
     A = zeros([n,n]); An=0*A;
     lap3dchargemat_numba(y,x,d,A,An)
     lap3ddipolemat_numba(y,d,x,d,A,An)
-    print('lap3dkernels: all jit compiles %.3g s'%(tic()-t0))
+    print('all jit compiles %.3g s'%(tic()-t0))
     
 def test():
     """All self-tests for lap3dkernels
@@ -469,3 +470,38 @@ def test():
     test_lap3dcharge()
     test_lap3ddipole()
     test_lap3dmats()
+
+def show_slice():
+    """early code to plot potential on a slice in 2D and 3D
+    """
+    ns = 300                        # sources
+    y = random.rand(ns,3)-0.5    # in [-1/2,1/2]^3
+    d = random.randn(ns,3)
+    z0=0.3; gmax=1.0                 # slice z, extent
+    x,xx,yy = slicepts(z0=z0,a=gmax)
+    nt = x.shape[0]
+    u = zeros(nt)    # numba version writes outputs to arguments
+    g = zeros([nt,3])
+    lap3ddipole_numba(y,d,x,u,g)
+
+    sc = 10   # colorscale
+    
+    # 2d image
+    fig,ax = pl.subplots()
+    #pl.figure()   # new fig
+    im = ax.imshow(u.reshape(xx.shape),cmap='jet',vmin=-sc,vmax=sc,extent=(-gmax,gmax,-gmax,gmax))
+    ax.set_xlabel('x'); ax.set_ylabel('y')
+    #fig.colorbar(im)
+    myplotutils.myshow(ax,im,fig)
+    #myplotutils.goodcolorbar(im)   # acts on the image
+    #pl.show()   # only needed if pl.ioff(), equiv of drawnow
+    # can then close with pl.close(1)  etc
+
+    # do 3d slice plot
+    fig = pl.figure()   # new fig
+    ax = fig.gca(projection='3d',aspect='equal')
+    pts = ax.scatter(xs=y[:,0],ys=y[:,1],zs=y[:,2],s=1)
+    usc = (u.reshape(xx.shape)+sc)/(2*sc)   # scale to [0,1] for cmap
+    # replace by x coords?
+    slice = ax.plot_surface(xx,yy,0*xx+z0,facecolors=pl.cm.jet(usc))
+    ax.set_xlabel('x'); ax.set_ylabel('y'); ax.set_zlabel('z')
