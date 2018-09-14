@@ -1,6 +1,6 @@
 # perilap3d: triply periodic electrostatic kernels for general unit cell
 
-version 0.5,  9/13/18
+version 0.6,  9/14/18
 
 Author: Alex H Barnett
 
@@ -12,23 +12,26 @@ lattice vectors), although currently it may not have high aspect
 ratio.  Potentials and fields are also available at the sources
 themselves, where the self-interaction (_j_=_i_) is excluded from the
 sum.  The scheme uses direct near-image sums plus solution of the
-empty "discrepancy" BVP via an auxiliary proxy point (fundamental
-solution) representation.  It is compatible with the fast multipole
+empty "discrepancy" BVP via an auxiliary proxy point (method of fundamental
+solutions or MFS) representation.  It is compatible with the fast multipole
 method (FMM), although currently only direct summation is used.
 
 For _N_ sources and targets, where the nonperiodic direct evaluation
-cost is _N_<sup>2</sup>, the cost of the periodic evaluation is about
-_c_<sup>3</sup>_N_<sup>2</sup> + _CN_, where _c_ is a small constant
-around 2, and _C_ is a larger constant around 10<sup>3</sup>, whose
-size scales like the square of the number of requested digits of
-accuracy.  For _N_=1000, the periodic evaluation is 10x slower than
-the non-periodic, at 3 digits of accuracy, and 20x slower at 9 digits.
+cost is _N_<sup>2</sup>,
+the cost of the periodic evaluation is about
+_c_<sup>3</sup>_N_<sup>2</sup> + O(_p_<sup>2</sup>_N_),
+where _c_ is a small
+constant around 2, and _p_ scales linearly with the number of digits
+required. Typically _p_=8 to 16, and the second term is around 
+10<sup>3</sup>_N_.
+For _N_=1000, the periodic evaluation is 10x slower than
+the non-periodic,at 3 digits of accuracy, and 20x slower at 9 digits.
 (If the FMM were used, both of the _N_<sup>2</sup> in the above would
 be replaced by _O_(_N_), and there would be ways to replace _c_ by
-close to 1.) There is also a precomputation phase with cost growing
-like the 6th power of the number of requested digits, which need be
+close to 1.) There is also a precomputation phase with cost
+O(_p_<sup>6</sup>), which need be
 done only once for a given unit cell shape, independent of the source
-locations.
+or target locations.
 
 ### Dependencies
 
@@ -42,18 +45,35 @@ in which all of our tests were done.
 ### Testing and usage
 
 Run `test.py` for a complete test of the library.
+It will produce output similar to the file `test.out`, which has timings
+for an i7 laptop.
+
+Here is a simple example (see `demo.py`):
+```
+from numpy import array,random
+import perilap3d as l3p
+
+L = array([[1,0,0],[-.3,1.1,0],[.2,-.4,.9]])    # each row is a lattice vec 
+p = l3p.lap3d3p(L)    # make a periodizing object for this lattice
+p.precomp(tol=1e-6)   # do expensive precomputation (0.6 sec)
+
+ns = 300                              # how many sources
+y = (random.rand(ns,3)-1/2).dot(L)    # randomly in unit cell
+d = random.randn(ns,3)                # dipole strength vectors
+pot,grad = p.eval(y,d)                # grad contains negatives of E field
+```
+
+See `perilap3d.py` test codes for more examples.
 
 ### To Do
 
-* add outputs at sources
-
-* fix fat Q case with QR solve
-
 * add charge sources
 
-* pass-fail accuracy test, wider range of unit cells?
+* spherical harmonics (or better) for aux rep for rapid empty BVP solve
 
-* spherical harmonics for aux rep instead?
+* fix fat Q case with QR solve? (only needed if m<P)
+
+* pass-fail accuracy test, wider range of unit cells?
 
 * way to save the Q factors for later use for that unit cell, for >8 digit acc
 

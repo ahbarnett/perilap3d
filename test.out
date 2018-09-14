@@ -1,0 +1,124 @@
+lap3dkernels: wait for numba jit compiles...
+all jit compiles 4.29 s
+test checkgrad:  1.015398876091922e-11
+test_lap3dcharge: grad check (native):  9.904230213741982e-13
+native: 2000000 src-targ pairs in 0.102 s: 0.0196 Gpair/s
+numba:  2000000 src-targ pairs in 0.00233 s: 0.86 Gpair/s
+pot err numba vs native:  7.11e-15
+grad err numba vs native: 9.09e-13
+test_lap3ddipole: grad check (native):  2.075187244265919e-12
+native: 2000000 src-targ pairs in 0.135 s: 0.0149 Gpair/s
+numba:  2000000 src-targ pairs in 0.00237 s: 0.844 Gpair/s
+pot err numba vs native:  4.55e-13
+grad err numba vs native: 2.33e-10
+numba self: 4000000 src-targ pairs in 0.0054 s: 0.74 Gpair/s
+chg mat pot err nrm =  8.673617379884035e-19
+chg mat n-grad err nrm =  8.673617379884035e-19
+dip mat pot err nrm =  0.0
+dip mat n-grad err nrm =  1.2412670766236366e-16 
+
+lap3d3p init: cond # unit cell = 1.62
+lap3d3p init: cond # unit cell = 1.62
+precomp: gam=1.88, m=10 per face side, P=10 per proxy side
+Q size 600*600, fill time 0.0017 s. factorizing (est time 0.11 s)...
+	SVD time 0.0391 s
+3d3p eval time = 9.41 ms
+max corner pot peri abs err: 0.00273
+max corner grad peri rel err: 0.000771
+test src/targ out opts (expect 0s): 0 0 0 0
+eval: ifsrc=0, iftarg=1
+eval nt=500, ns=500: 3371 near src, time	5.84 ms
+	discrep eval				2.93 ms
+	solve lin sys for xi 			0.249 ms
+	resid rel nrm 8.82e-05
+	|discrep|=176, soln |xi|=3.49e+03
+	aux rep eval at targs		0.402 ms
+	total eval time: 			9.66 ms
+cf non-per eval time 0.466 ms (ratio: 20.2)
+
+lap3d3p init: cond # unit cell = 1.62
+precomp: gam=2.26, m=14 per face side, P=14 per proxy side
+Q size 1176*1176, fill time 0.00609 s. factorizing (est time 0.81 s)...
+	SVD time 0.344 s
+3d3p eval time = 16.2 ms
+max corner pot peri abs err: 2.14e-06
+max corner grad peri rel err: 6.39e-07
+test src/targ out opts (expect 0s): 0 0 0 0
+eval: ifsrc=0, iftarg=1
+eval nt=500, ns=500: 5706 near src, time	8.02 ms
+	discrep eval				6.35 ms
+	solve lin sys for xi 			0.848 ms
+	resid rel nrm 7.49e-08
+	|discrep|=208, soln |xi|=5.52e+03
+	aux rep eval at targs		0.766 ms
+	total eval time: 			16.5 ms
+cf non-per eval time 0.577 ms (ratio: 28.1)
+
+lap3d3p init: cond # unit cell = 1.62
+precomp: gam=2.65, m=16 per face side, P=16 per proxy side
+Q size 1536*1536, fill time 0.0106 s. factorizing (est time 1.8 s)...
+	SVD time 1.09 s
+3d3p eval time = 25.3 ms
+max corner pot peri abs err: 2.33e-09
+max corner grad peri rel err: 7.74e-10
+test src/targ out opts (expect 0s): 0 0 0 0
+eval: ifsrc=0, iftarg=1
+eval nt=500, ns=500: 9080 near src, time	11.1 ms
+	discrep eval				10.7 ms
+	solve lin sys for xi 			1.43 ms
+	resid rel nrm 2.7e-10
+	|discrep|=173, soln |xi|=1.39e+04
+	aux rep eval at targs		0.953 ms
+	total eval time: 			25.1 ms
+cf non-per eval time 0.596 ms (ratio: 42.5)
+
+lap3d3p init: cond # unit cell = 1.62
+precomp: gam=3, m=18 per face side, P=18 per proxy side
+Q size 1944*1944, fill time 0.0168 s. factorizing (est time 3.7 s)...
+	SVD time 2.66 s
+3d3p eval time = 36.7 ms
+max corner pot peri abs err: 1.61e-11
+max corner grad peri rel err: 2.85e-12
+test src/targ out opts (expect 0s): 0 0 0 0
+eval: ifsrc=0, iftarg=1
+eval nt=500, ns=500: 13500 near src, time	15.2 ms
+	discrep eval				17.8 ms
+	solve lin sys for xi 			2.22 ms
+	resid rel nrm 9.97e-13
+	|discrep|=218, soln |xi|=1.2e+04
+	aux rep eval at targs		1.36 ms
+	total eval time: 			37.8 ms
+cf non-per eval time 0.492 ms (ratio: 74.5)
+
+lap3d3p init: cond # unit cell = 1.7
+eval at tol=0.01...
+precomp: gam=1.76, m=9 per face side, P=9 per proxy side
+Q size 486*486, fill time 0.00132 s. factorizing (est time 0.057 s)...
+	SVD time 0.036 s
+	grad at first src: [  0.11373582  -3.67236433 -10.14157683]
+eval at tol=0.0001...
+precomp: gam=2.02, m=12 per face side, P=12 per proxy side
+Q size 864*864, fill time 0.0038 s. factorizing (est time 0.32 s)...
+	SVD time 0.122 s
+	grad at first src: [  0.11367392  -3.67246629 -10.14167415]
+eval at tol=1e-06...
+precomp: gam=2.28, m=15 per face side, P=15 per proxy side
+Q size 1350*1350, fill time 0.00757 s. factorizing (est time 1.2 s)...
+	SVD time 0.646 s
+	grad at first src: [  0.11367402  -3.6724666  -10.14167496]
+eval at tol=1e-08...
+precomp: gam=2.54, m=16 per face side, P=16 per proxy side
+Q size 1536*1536, fill time 0.00978 s. factorizing (est time 1.8 s)...
+	SVD time 1.2 s
+	grad at first src: [  0.11367402  -3.6724666  -10.14167496]
+eval at tol=1e-10...
+precomp: gam=2.8, m=17 per face side, P=17 per proxy side
+Q size 1734*1734, fill time 0.0132 s. factorizing (est time 2.6 s)...
+	SVD time 1.76 s
+	grad at first src: [  0.11367402  -3.6724666  -10.14167496]
+
+convergence table:	req tol		grad rel l2 err
+			0.01		0.000645
+			0.0001		6.32e-06
+			1e-06		1.1e-08
+			1e-08		3.97e-10

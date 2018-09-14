@@ -1,4 +1,4 @@
-# self-test for perilap3d; includes plots. Takes ~1 min to complete.
+# self-test for perilap3d; includes plots. Takes 10-20 sec to complete.
 # Barnett 9/13/18
 
 import lap3dkernels as l3k
@@ -16,3 +16,6 @@ l3p.test_lap3d3p(tol=1e-3,verb=2)  # include pics
 l3p.test_lap3d3p(tol=1e-6)
 l3p.test_lap3d3p(tol=1e-9)
 l3p.test_lap3d3p(tol=1e-12)
+
+# convergence test for grad at sources
+l3p.test_conv_lap3d3p()

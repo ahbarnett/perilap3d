@@ -168,7 +168,6 @@ def lap3ddipole_numba(y,d,x,pot,grad,add=False):
     numba jit. Writes into pot and grad.
     See lap3ddipole_native.
     Optional input: add - if True, add to what's in pot,grad; False overwrite.
-    pot,grad passed in since njit fails with internal pot=zeros(nt)
     """
     y = np.atleast_2d(y)     # handle ns=1 case: make 1x3 not 3-vecs
     d = np.atleast_2d(d)
@@ -266,18 +265,18 @@ def lap3ddipolemat_numba(y,d,x,e,A,An):
             An[i,j] = (ddote - 3*ddotR*edotR/r2) * pir3
 
 @numba.njit(parallel=True,fastmath=True)
-def lap3ddipoleself_numba(y,d,pot,grad):
+def lap3ddipoleself_numba(y,d,pot,grad,add=False):
     """evaluate pot & grad of 3D Laplace dipoles, self (j!=i), naive sum,
     numba jit.
 
     Inputs which are written into:
     pot  float(n) potential at n sources
     grad float(n,3) gradient (negative of E field) at n sources
+    Optional input: add - if True, add to what's in pot,grad; False overwrite.
 
     Definition of pot and grad are as in lap3ddipole_native, omitting j=i term.
  
-    Issues: Obsolete for now, but keep around in case faster for self case.
-    * why is this code 1/2 the speed of lap3ddipole_numba ? (no, it's
+    Issues: * why is this code 1/2 the speed of lap3ddipole_numba ? (no, it's
     not the i j!=i conditional...).
     """
     if y.ndim==1:          # n=1, no self-int, no need for atleast_2d
@@ -287,7 +286,8 @@ def lap3ddipoleself_numba(y,d,pot,grad):
     assert(grad.shape==(n,3))
     prefac = 1.0/(4.0*np.pi)
     for i in numba.prange(n):    # loop over targs
-        pot[i] = grad[i,0] = grad[i,1] = grad[i,2] = 0.0
+        if not add:
+            pot[i] = grad[i,0] = grad[i,1] = grad[i,2] = 0.0
         for j in range(n):
             if j!=i:       # same speed as splitting to explicit j<i, j>i cases
                 R0 = y[i,0]-y[j,0]

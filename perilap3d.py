@@ -23,7 +23,7 @@ class lap3d3p:
 
     Issues: * annoying "self hell", not sure of struct vs class style
     """
-    def __init__(self,lat,verb=1):
+    def __init__(self,lat,verb=0):
         # attributes supposed to list here (annoying; I don't). some defaults
         self.lat = lat
         self.ilat = la.inv(lat)        # cols are recip vectors
@@ -79,7 +79,8 @@ class lap3d3p:
         """return m^2 points & normals covering each of the 3*2 unit cell faces.
         Non-self inputs:
           m    - integer number of pts per face side
-          grid (optional) - 'u' uniform, 'g' Gauss-Legendre, on each 1d edge
+          grid (optional) - type of grid on each 1d edge:
+                           'u' uniform, 'g' Gauss-Legendre, 'b' bunched
         Output is tuple of:
           pts,  float[3,2,m^2,3] - set of all points on the six faces
           nors, float[3,2,m^2,3] - set of corresponding +ve normal directions
@@ -89,7 +90,9 @@ class lap3d3p:
         pts = zeros([3,2,m**2,3])
         nors = zeros([3,2,m**2,3])
         if grid=='u':                    # build 1d colloc pts in [0,1]
-            g = (np.arange(m)+1/2)/m            
+            g = (np.arange(m)+1/2)/m
+        elif grid=='b':
+            g = (np.tan(np.pi/4*(2*(np.arange(m)+1/2)/m-1))+1)/2
         else:
             x,w = np.polynomial.legendre.leggauss(m)
             g = (x+1)/2
@@ -102,7 +105,7 @@ class lap3d3p:
                 pts[d,i,:,:] = r.dot(self.lat)      # transform to lattice
         return pts, nors
 
-    def precomp(self,tol=1e-3,proxytype='s',facmeth='s',verb=1,gamma=None):
+    def precomp(self,tol=1e-3,proxytype='s',facmeth='s',verb=0,gamma=None):
         """Periodizing setup and Q factorization.
         Optionally can set:
           tol - tolerance, ie desired relative precision.
@@ -121,18 +124,18 @@ class lap3d3p:
         self.proxytype=proxytype
         # ------- hacks for numerical param choices based on tol, here:
         if gamma is None:    # inflation factor for near summation
-            self.gamma=1.5+digits/10   # hack to expand near box, reducing m,P
+            self.gamma=1.5+np.sqrt(self.badness)*digits/10  # big box reduces m,P
         else:
             self.gamma = gamma
-        self.gamma = min(self.gamma,3)   # since we didn't code more than 3x3x3
-        self.gap = (self.gamma-1)/2   # gap from near box to std UC bdry = "nei"
+        self.gamma = min(self.gamma,3) # since we didn't code more than 3x3x3
+        self.gap = (self.gamma-1)/2    # gap from near box to std UC bdry = "nei"
         scaledgap = self.gap/self.badness
-        self.m = int(4+0.9*digits/scaledgap)  # colloc pts per face side
+        self.m = int(1+0.9*digits/scaledgap)  # tweak: colloc pts per face side
         # ------- (end hacks)
         self.c,self.cn = self.UCsurfpts(self.m,grid='g')   # make colloc pts
         self.Nc = self.c.shape[1]
         P = self.m                            # aux pts per face side = "order"
-        p,pn = self.UCsurfpts(P)              # make aux src pts, normals
+        p,pn = self.UCsurfpts(P,grid='b')     # make aux src pts, normals
         self.Np = 6*p.shape[2]                # num aux (proxy) pts
         self.p = self.gamma * p.reshape([self.Np,3])  # gather aux pts together
         self.pn = pn.reshape([self.Np,3])
@@ -158,7 +161,7 @@ class lap3d3p:
         else:             # best & slowest: SVD, observe smaller soln norms
             U,svals,Vh = la.svd(self.Q,full_matrices=False,check_finite=False)
             isvals = 1/svals
-            cutoff = max(1e-3*tol,1e-15)     # well below tolerance
+            cutoff = max(1e-4*tol,1e-15)     # well below tolerance
             isvals[svals<cutoff*svals[0]] = 0.0    # truncated pinv
             self.QfacSUh = isvals[:,None] * U.T.conj()    # combine 2 factors
             self.QfacV = Vh.T.conj()            # Hermitian transpose
@@ -188,31 +191,73 @@ class lap3d3p:
 
     # uncomment following line only for line_profiler via kernprof...
     #@profile
-    def eval(self,y,d,x,verb=0):
-        """Evaluate triply-periodic Laplace 3D dipole sum at non-self targets.
-        See lap3ddipole_native for free-space definitions.
+    def eval(self,y,d,x=None,ifsrc=False,verb=0):
+        """Evaluate triply-periodic Laplace 3D dipole sum at sources y (omitting
+        self-interaction j=i), new targets x (distinct from sources), or both.
+
+        The kernels are triply periodic version of those in lap3ddipole_native.
+
+        Inputs:
+          y (ns*3 float) - sources
+          d (ns*3 float) - source dipole strength vectors
         Optional inputs:
-          verb - (integer) verbosity: 0 silent, 1 text, 2 and figs,...
+          x (nt*3 float) - new target points. If absent, ifsrc=True is set.
+          ifsrc (bool) - whether to self-evaluate at the sources
+          verb (integer) - verbosity: 0 silent, 1 text, 2 and figs,...
+
+        Outputs:
+        If x is not None, and ifsrc == False: output a tuple of
+          pott (nt float) - potentials at targets
+          gradt (nt*3 float) - gradients (negative of E field) at targets
+        If x is None, and ifsrc == True: output a tuple of
+          pot (ns float) - potentials at sources
+          grad (ns*3 float) - gradients (negative of E field) at sources
+        If x is not None, and ifsrc == True: output a tuple of
+          pot (ns float) - potentials at sources
+          grad (ns*3 float) - gradients (negative of E field) at sources
+          pott (nt float) - potentials at targets
+          gradt (nt*3 float) - gradients (negative of E field) at targets
+
+        Issues: * not sure if most elegant output format.
+                * all the lap3d eval calls in here could be switchable to FMM.
         """
-        Ns=y.shape[0]      # num srcs
-        Nt=x.shape[0]      # num targs
+        Ns=y.shape[0]        # num srcs
+        iftarg = (x is not None)
+        if iftarg:
+            Nt=x.shape[0]    # num targs
+        else:
+            ifsrc=True       # override: if no targs, presume you want src eval!
+            Nt = 0
+        if verb:
+            print('eval: ifsrc=%d, iftarg=%d'%(ifsrc,iftarg))
         t1=tic() # sum all near images of sources, to the targets:
         y0 = y.dot(self.ilat)   # srcs xformed back as if std UC [-1/2,1/2]^3
         ynr = zeros([0,3])   # all nr srcs, or use list for faster append?
         dnr = zeros([0,3])   # all nr src strength vecs
+        # build all near source images, excluding original ones...
         for i in range(-1,2):
             for j in range(-1,2):
                 for k in range(-1,2):
-                    ijk = array([i,j,k])         # integer translation vec
-                    y0tr = y0 + ijk                 # broadcast, transl srcs
-                    ii = np.max(np.abs(y0tr),axis=1) < (1/2+self.gap) # is near?
-                    ynr = np.vstack([ynr, y[ii,:] + ijk.dot(self.lat)])
-                    dnr = np.vstack([dnr, d[ii,:]])
-        pot = 0*x[:,0]; grad = 0*x     # alloc output arrays
-        # NB stacking nr srcs & doing single call here good if # targs big...
-        l3k.lap3ddipole_numba(ynr,dnr,x,pot,grad)   # eval direct near sum
+                    if (i,j,k)!=(0,0,0):             # exclude true sources
+                        ijk = array([i,j,k])         # integer translation vec
+                        y0tr = y0 + ijk              # broadcast, transl srcs
+                        ii = np.max(np.abs(y0tr),axis=1) < (1/2+self.gap) # near?
+                        ynr = np.vstack([ynr, y[ii,:] + ijk.dot(self.lat)])
+                        dnr = np.vstack([dnr, d[ii,:]])
+        if ifsrc:
+            pot = 0*y[:,0]; grad = 0*y     # alloc src field output arrays
+            l3k.lap3ddipole_numba(ynr,dnr,y,pot,grad)  # direct non-self near
+            l3k.lap3ddipoleself_numba(y,d,pot,grad,add=True)  # nr src self-int
+        ynr = np.vstack([ynr, y])          # append original srcs to list
+        dnr = np.vstack([dnr, d])
+        if iftarg:
+            pott = 0*x[:,0]; gradt = 0*x     # alloc targ output arrays
+            # NB stacking nr srcs w/ single call here good if # targs big...
+            l3k.lap3ddipole_numba(ynr,dnr,x,pott,gradt)  # eval direct near sum
+            
         if verb:
-            print('eval nt=%d, ns=%d: %d near src, time\t%.3g ms' % (Nt,Ns,ynr.shape[0],1e3*(tic()-t1)))
+            print('eval nt=%d, ns=%d: %d near src, time\t%.3g ms' %
+                  (Nt,Ns,ynr.shape[0],1e3*(tic()-t1)))
         
         # compute discrepancy of near source (always dipole) images on UC faces
         t0=tic()
@@ -251,20 +296,32 @@ class lap3d3p:
             print('\tresid rel nrm %.3g'%(norm(self.Q.dot(xi) - discrep)/norm(discrep))) # adds 1ms
             print('\t|discrep|=%.3g, soln |xi|=%.3g'%(norm(discrep),norm(xi)))
         
-        t0=tic() # add aux proxy rep to pot (dipole case: srcdip = xi * direcs)
+        t0=tic()  # add aux proxy rep to out (dipole case: srcdip = xi * direcs)
         if self.proxytype=='s':
-            l3k.lap3dcharge_numba(self.p,xi,x,pot,grad,add=True)  # xi = charges
+            if ifsrc:     # eval aux contrib (charges xi) back at srcs y
+                l3k.lap3dcharge_numba(self.p,xi,y,pot,grad,add=True)
+            if iftarg:
+                l3k.lap3dcharge_numba(self.p,xi,x,pott,gradt,add=True)
         else:
-            l3k.lap3ddipole_numba(self.p,xi[:,None]*self.pn,x,pot,grad,add=True)
+            if ifsrc:
+                l3k.lap3ddipole_numba(self.p,xi[:,None]*self.pn,y,pot,grad,add=True)
+            if iftarg:
+                l3k.lap3ddipole_numba(self.p,xi[:,None]*self.pn,x,pott,gradt,add=True)
         if verb:
             print('\taux rep eval at targs\t\t%.3g ms'%(1e3*(tic()-t0)))
             print('\ttotal eval time: \t\t\t%.3g ms'%(1e3*(tic()-t1)))
 
         if verb>1:       # plot all near src images, all targs x...
             pl.gca().scatter(ynr[:,0],ynr[:,1],ynr[:,2],s=1,color='k')
-            pl.gca().scatter(x[:,0],x[:,1],x[:,2],color='g',s=3)
+            if iftarg:
+                pl.gca().scatter(x[:,0],x[:,1],x[:,2],color='g',s=3)
 
-        return pot, grad
+        if iftarg and not ifsrc:
+            return pott, gradt
+        elif not iftarg and ifsrc:
+            return pot, grad
+        elif iftarg and ifsrc:
+            return pot, grad, pott, gradt
 
 def test_lap3d3p(tol=1e-3,verb=1,gamma=None):
     """Speed and accuracy test for lap3d3p (Laplace 3D triply-periodic) class.
@@ -273,13 +330,13 @@ def test_lap3d3p(tol=1e-3,verb=1,gamma=None):
        gamma - override near box size, see lap3d3p precomp().
        verb - verbosity: 1 for text, 2 for text+pictures
     """
-    l3k.warmup()
+    #l3k.warmup()
     random.seed(seed=0)
     L = array([[1,0,0],[0.3,1,0],[-0.2,0.3,0.9]])  # rows are lattice vecs
     #L = eye(3)        # cubical (best-case) lattice
     #L[0,0]=2.0        # cuboid (beyond aspect ratio 2 it dies)
-    p = lap3d3p(L)     # make a periodizing object
-    p.precomp(tol=tol,gamma=gamma)     # doesn't need the src pts
+    p = lap3d3p(L,verb=1)         # make a periodizing object
+    p.precomp(tol=tol,gamma=gamma,verb=verb)     # doesn't need the src pts
     if verb>1:
         pl.ion(); ax=p.show()     # plot it
     ns = 500                      # sources
@@ -298,19 +355,53 @@ def test_lap3d3p(tol=1e-3,verb=1,gamma=None):
     #print(g[0:8])     # peri-checking field vals
     print('max corner pot peri abs err: %.3g'%(np.max(u[0:8])-np.min(u[0:8])))
     print('max corner grad peri rel err: %.3g'%(np.max(np.abs(g[0]-g[1:8]))/norm(g[0])))
+    us,gs = p.eval(y,d)    # test output opts: eval at sources only...
+    us2,gs2,ut,gt = p.eval(y,d,x,ifsrc=True)   # test src and targ eval together
+    us2 -= us2[0]-us[0]    # correct for const pot offsets
+    ut -= ut[0]-u[0]
+    print('test src/targ out opts (expect 0s): %.3g %.3g %.3g %.3g'%
+          (norm(us-us2,ord=np.inf),norm(gs-gs2,ord=1),norm(ut-u,ord=np.inf),
+           norm(gt-g,ord=1)))
     if verb>0:
-        u,g = p.eval(y,d,x,verb)   # maybe report more info?
+        u,g = p.eval(y,d,x,verb=verb)   # to report more info
     t0=tic()      # time the free-space eval...
     for i in range(reps):
         l3k.lap3ddipole_numba(y,d,x,u,g)
     tnonper=(tic()-t0)/reps
     print('cf non-per eval time %.3g ms (ratio: %.3g)\n'%(1e3*tnonper,teval/tnonper))
+
+def test_conv_lap3d3p():
+    """Convergence test for grad at sources for lap3d3p
+    Barnett 9/14/18
+    """
+    random.seed(seed=0)
+    #L=eye(3)   # cube, easiest, or some worse unit cell (each row a latt vec)...
+    L = array([[1,0,0],[-.3,1.1,0],[.2,-.4,.9]])
+    #L = array([[1,0,0],[0.5,np.sqrt(3)/2,0],[-0.2,0.1,0.5]])
+    p = lap3d3p(L,verb=1)   # make a periodizing object
+    ns = 10           # can be 1000 or more, but makes rel err look too good :)
+    # a rand y is flawed since if two come close, makes rel err too good...
+    y = (random.rand(ns,3)-1/2).dot(L)    # in [-1/2,1/2]^3 then xform to latt
+    d = random.randn(ns,3)        # dipole strength vectors
+    tols = 10.0**-np.arange(2,12,2)
+    n = tols.size
+    gg = zeros([n,ns,3])       # store all grad outputs
+    for i in range(n):
+        print('eval at tol=%.3g...'%(tols[i]))
+        p.precomp(tol=tols[i],verb=1)
+        u,gg[i] = p.eval(y,d)
+        print('\tgrad at first src:',gg[i][0])
+    gnrm = norm(gg[n-1],ord='fro')    # l2 norm of all field cmpnts, most acc
+    #print('norm g:',gnrm)
+    print('\nconvergence table:\treq tol\t\tgrad rel l2 err')
+    for i in range(n-1):
+        print('\t\t\t%.3g\t\t%.3g'%(tols[i],norm(gg[i]-gg[n-1],ord='fro')/gnrm))
     
 def slicepts(z0=0.0,a=2.0,m=200):
     """return n*3 array of pts on a square slice z=z0, size a*a in xy plane
     Used for 3d plotting. n=m^2, where m is optional argument.
     """
-    gr = np.linspace(-a,a,num=m)    # targets: grid size per dim
+    gr = np.linspace(-a,a,m,endpoint=False)   # targets: grid per dim
     xx,yy = np.meshgrid(gr,gr)
     nt = xx.size
     return np.hstack((xx.ravel()[:,None], yy.ravel()[:,None], z0*np.ones([nt,1]))), xx, yy
@@ -320,7 +411,7 @@ def show_perislice(tol=1e-3):
     """
     L = array([[1,0,0],[0.3,1,0],[-0.2,0.3,0.9]])  # rows are lattice vecs
     p = lap3d3p(L)
-    p.precomp(1e-3,verb=0)
+    p.precomp(1e-3)
     ns = 100                              # sources
     y = (random.rand(ns,3)-1/2).dot(L)    # in [-1/2,1/2]^3 then xform to latt
     d = random.randn(ns,3)                # dipole strength vectors
