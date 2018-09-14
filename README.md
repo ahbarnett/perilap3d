@@ -62,6 +62,7 @@ y = (random.rand(ns,3)-1/2).dot(L)    # randomly in unit cell
 d = random.randn(ns,3)                # dipole strength vectors
 pot,grad = p.eval(y,d)                # grad contains negatives of E field
 ```
+The first call to `eval` after importing will require a few seconds to jit-compile the numba code. With this done, the above `eval` call takes 11 ms on an i7.
 
 See `perilap3d.py` test codes for more examples.
 
