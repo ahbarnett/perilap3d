@@ -16,7 +16,7 @@ class lap3d3p:
     """Laplace 3D Triply-periodic class. Needs: lap3dkernels, myplotutils
 
     Inputs:
-      lat - 3x3 matrix, each row is a lattice vector (right-handed)
+      lat - 3x3 matrix, each row a lattice vector (only right-handed tested).
       verb - (integer, optional) verbosity: 0 silent, 1 text
  
     See: test_lap3d3p() below
@@ -32,21 +32,12 @@ class lap3d3p:
             self.nors[i] = self.nors[i]/norm(self.nors[i])   # normalize row
         if verb:
             print('lap3d3p init: cond # unit cell = %.3g'%(cond(lat)))
-        self.badness = max(1.4,cond(lat))
-        if self.badness>10:
+        self.badness = cond(lat)
+        if self.badness>5:
             print('unit cell bad aspect ratio: will be slow & bad!')
-        self.tol = None
-        self.m = None    # colloc pts per face side
-        self.scale = None   # linear factor to include as "near", ie 1+2*nei
-        self.Np = None   # num proxy src pts
-        self.Nc = None   # num surf colloc pts
         self.c=None      # face colloc pts 3(dir) * 2 * m^2(ind) * 3(xyz coord)
-        self.cn=None     # face colloc nors
         self.p=None      # aux (proxy) src pts np * 3(xyz coord)
-        self.pn=None     # aux src pt nors
         self.facename = [['L','R'],['B','F'],['U','D']]   # NB list of lists
-        self.Q = None    # periodizing matrix (also there's self.Qfac*)
-        self.facmeth = None
         
     def show(self):
         """plot the unit cell on a new figure. returns the axis handle
@@ -111,48 +102,58 @@ class lap3d3p:
                 pts[d,i,:,:] = r.dot(self.lat)      # transform to lattice
         return pts, nors
 
-    def precomp(self,tol=1e-3,proxytype='s',facmeth='s',verb=1):
+    def precomp(self,tol=1e-3,proxytype='s',facmeth='s',verb=1,gamma=None):
         """Periodizing setup and Q factorization.
         Optionally can set:
-          tol : tolerance, ie desired relative precision.  *** not yet used
+          tol - tolerance, ie desired relative precision.
+          gamma - override growth factor of unit cell for "near" image sum.
+                  Must be in (1,3].  Increase it for bad unit cells.
+                  Vary with care: 1.8 is good for tol=1e-3, 2.5 for tol=1e-9.
+          verb - (integer) verbosity: 0 silent, 1 text, 2 and figs,...
+
+        Experts may vary these inputs:
           proxytype - 's' (charges) or 'd' (dipoles), for aux rep
           facmeth - Q factorization: 's' for SVD, 'q' for QR, 'p' for pivoted QR
                                      '' for don't factor, use LSQ solve in eval.
-          verb - (integer) verbosity: 0 silent, 1 text, 2 and figs,...
         """
         self.tol=tol
-        self.proxytype=proxytype
         digits = -np.log10(tol)
-        self.m = int(6+1.3*digits*self.badness)     # colloc pts per face side
-        self.scale = 1.8   # inflation factor for near summation, in (1,3]
-        self.gap = (self.scale-1)/2   # gap from near box to std UC bdry = "nei"
+        self.proxytype=proxytype
+        if gamma is None:    # inflation factor for near summation
+            self.gamma=1.5+digits/10   # hack to expand near box, reducing m,P
+        else:
+            self.gamma = gamma
+        self.gamma = min(self.gamma,3)   # since we didn't code more than 3x3x3
+        self.gap = (self.gamma-1)/2   # gap from near box to std UC bdry = "nei"
+        scaledgap = self.gap/self.badness
+        self.m = int(4+0.9*digits/scaledgap)  # colloc pts per face side
         self.c,self.cn = self.UCsurfpts(self.m,grid='g')   # make colloc pts
         self.Nc = self.c.shape[1]
-        P = int(5+1.6*digits*self.badness)    # aux pts per face side = "order"
-        p,pn = self.UCsurfpts(P)      # make aux src pts, normals
-        self.Np = 6*p.shape[2]   # num aux (proxy) pts
-        self.p = self.scale * p.reshape([self.Np,3]) # gather all pts together
+        P = self.m                            # aux pts per face side = "order"
+        p,pn = self.UCsurfpts(P)              # make aux src pts, normals
+        self.Np = 6*p.shape[2]                # num aux (proxy) pts
+        self.p = self.gamma * p.reshape([self.Np,3])  # gather aux pts together
         self.pn = pn.reshape([self.Np,3])
         if verb:
-            print('precomp: m=%d per face side, P=%d per proxy side'%(self.m,P))
+            print('precomp: gam=%.3g, m=%d per face side, P=%d per proxy side'%(self.gamma,self.m,P))
         
-        t0=tic()         # setup periodizing matrix & factorized inverse...
-        self.fillQ()     # keeps Q around as an attribute
+        t0=tic()          # setup periodizing matrix & factorized inverse...
+        self.fillQ()      # keeps Q around as an attribute
         if verb:
-            print('Q size %d*%d, fill time %.3g s. factorizing...'%(self.Q.shape[0],self.Q.shape[1],tic()-t0))
+            print('Q size %d*%d, fill time %.3g s. factorizing (est time %.2g s)...'%(self.Q.shape[0],self.Q.shape[1],tic()-t0,(self.Q.size**1.5)/2e9))
         t0=tic(); self.facmeth=facmeth
-        if facmeth=='q':
+        if facmeth=='q':  # *** NB both QR methods fail for "fat" Q currently
             self.QfacQ,R = la.qr(self.Q,mode='economic')   # no pivoting, fast
             self.invR = la.inv(R)
             if verb:
-                print('QR + inv(R) time %.3g s, norm(invR)=%.3g'%(tic()-t0,norm(self.invR)))
+                print('\tQR + inv(R) time %.3g s, norm(invR)=%.3g'%(tic()-t0,norm(self.invR)))
         elif facmeth=='p':    # pivoted QR is 4x slower vs QR! (true in matlab)
             self.QfacQ,R,self.Qperm = la.qr(self.Q,mode='economic',pivoting=True)
             self.invR = la.inv(R)
             if verb:
-                print('piv-QR + inv(R) time %.3g s, norm(invR)=%.3g'%(tic()-t0,norm(self.invR)))
+                print('\tpiv-QR + inv(R) time %.3g s, norm(invR)=%.3g'%(tic()-t0,norm(self.invR)))
             #print(self.invR)  # guess mult by invR will be bkw stable, good.
-        else:        # use SVD: observe smaller soln norms, even if best
+        else:             # best & slowest: SVD, observe smaller soln norms
             U,svals,Vh = la.svd(self.Q,full_matrices=False,check_finite=False)
             isvals = 1/svals
             cutoff = max(1e-3*tol,1e-15)     # well below tolerance
@@ -160,7 +161,7 @@ class lap3d3p:
             self.QfacSUh = isvals[:,None] * U.T.conj()    # combine 2 factors
             self.QfacV = Vh.T.conj()            # Hermitian transpose
             if verb:
-                print('SVD time %.3g s'%(tic()-t0))
+                print('\tSVD time %.3g s'%(tic()-t0))
 
     def fillQ(self):
         """fill quasiperiodizing 6m^2-by-Np matrix commonly called Q, in self.
@@ -263,18 +264,20 @@ class lap3d3p:
 
         return pot, grad
 
-def test_lap3d3p(tol=1e-3,verb=1):
-    """Tester and performance for lap3d3p (Laplace 3D triply-periodic) class.
+def test_lap3d3p(tol=1e-3,verb=1,gamma=None):
+    """Speed and accuracy test for lap3d3p (Laplace 3D triply-periodic) class.
     Optional inputs:
        tol - requested tolerance
+       gamma - override near box size, see lap3d3p precomp().
        verb - verbosity: 1 for text, 2 for text+pictures
     """
     l3k.warmup()
     random.seed(seed=0)
     L = array([[1,0,0],[0.3,1,0],[-0.2,0.3,0.9]])  # rows are lattice vecs
     #L = eye(3)        # cubical (best-case) lattice
+    #L[0,0]=2.0        # cuboid (beyond aspect ratio 2 it dies)
     p = lap3d3p(L)     # make a periodizing object
-    p.precomp(tol)     # doesn't need the src pts
+    p.precomp(tol=tol,gamma=gamma)     # doesn't need the src pts
     if verb>1:
         pl.ion(); ax=p.show()     # plot it
     ns = 500                      # sources
@@ -299,10 +302,7 @@ def test_lap3d3p(tol=1e-3,verb=1):
     for i in range(reps):
         l3k.lap3ddipole_numba(y,d,x,u,g)
     tnonper=(tic()-t0)/reps
-    print('cf non-per eval time %.3g ms (ratio: %.3g)'%(1e3*tnonper,teval/tnonper))
-
-#def convtest_lap3d3p():
-
+    print('cf non-per eval time %.3g ms (ratio: %.3g)\n'%(1e3*tnonper,teval/tnonper))
     
 def slicepts(z0=0.0,a=2.0,m=200):
     """return n*3 array of pts on a square slice z=z0, size a*a in xy plane

@@ -1,3 +1,6 @@
+# self-test for perilap3d; includes plots. Takes ~1 min to complete.
+# Barnett 9/13/18
+
 import lap3dkernels as l3k
 import perilap3d as l3p
 import matplotlib.pyplot as pl
@@ -8,8 +11,8 @@ l3k.test()
 
 # test triply periodic evaluator
 pl.ion()                           # so figs don't interrupt the code
-l3p.test_lap3d3p(tol=1e-3,verb=2)  # include pics
-l3p.test_lap3d3p(tol=1e-6,verb=1)
-l3p.test_lap3d3p(tol=1e-9,verb=1)
-pl.ioff()
 l3p.show_perislice()
+l3p.test_lap3d3p(tol=1e-3,verb=2)  # include pics
+l3p.test_lap3d3p(tol=1e-6)
+l3p.test_lap3d3p(tol=1e-9)
+l3p.test_lap3d3p(tol=1e-12)
