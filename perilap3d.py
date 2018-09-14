@@ -119,6 +119,7 @@ class lap3d3p:
         self.tol=tol
         digits = -np.log10(tol)
         self.proxytype=proxytype
+        # ------- hacks for numerical param choices based on tol, here:
         if gamma is None:    # inflation factor for near summation
             self.gamma=1.5+digits/10   # hack to expand near box, reducing m,P
         else:
@@ -127,6 +128,7 @@ class lap3d3p:
         self.gap = (self.gamma-1)/2   # gap from near box to std UC bdry = "nei"
         scaledgap = self.gap/self.badness
         self.m = int(4+0.9*digits/scaledgap)  # colloc pts per face side
+        # ------- (end hacks)
         self.c,self.cn = self.UCsurfpts(self.m,grid='g')   # make colloc pts
         self.Nc = self.c.shape[1]
         P = self.m                            # aux pts per face side = "order"
@@ -258,7 +260,7 @@ class lap3d3p:
             print('\taux rep eval at targs\t\t%.3g ms'%(1e3*(tic()-t0)))
             print('\ttotal eval time: \t\t\t%.3g ms'%(1e3*(tic()-t1)))
 
-        if verb>1:       # plot all near src, all targs...
+        if verb>1:       # plot all near src images, all targs x...
             pl.gca().scatter(ynr[:,0],ynr[:,1],ynr[:,2],s=1,color='k')
             pl.gca().scatter(x[:,0],x[:,1],x[:,2],color='g',s=3)
 

@@ -45,15 +45,18 @@ Run `test.py` for a complete test of the library.
 
 ### To Do
 
+* add outputs at sources
+
 * fix fat Q case with QR solve
 
 * add charge sources
 
-* pass-fail accuracy test, wider range of unit cells
+* pass-fail accuracy test, wider range of unit cells?
+
+* spherical harmonics for aux rep instead?
 
 * way to save the Q factors for later use for that unit cell, for >8 digit acc
 
-* spherical harmonics for aux rep instead
 
 ### References
 
