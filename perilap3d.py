@@ -429,3 +429,9 @@ def show_perislice(tol=1e-3):
     # fig.colorbar(im)  # if no interaction wanted, or:
     myplotutils.myshow(ax,im,fig)   # drag and drag colorbar
     pl.show()   # equiv of drawnow
+
+    # show 3D plot w/ slice
+    ax=p.show()
+    ax.scatter(xs=y[:,0],ys=y[:,1],zs=y[:,2],s=1)
+    usc = (pot.reshape(xx.shape)+c)/(2*c)   # scale to [0,1] for cmap
+    slice = ax.plot_surface(np.reshape(x[:,0],xx.shape),np.reshape(x[:,1],xx.shape),np.reshape(x[:,2],xx.shape),facecolors=pl.cm.jet(usc))
