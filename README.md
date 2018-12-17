@@ -4,11 +4,11 @@ version 0.6,  9/14/18
 
 Author: Alex H Barnett
 
-![perilap3d demo for self-interaction of 1000 sources (light blue points) in a skew unit cell.
-Triply-periodic potential is shown on a slice.
+![perilap3d demo image](perilap3d2cut.png "perilap3d demo image:
+for self-interaction of 1000 sources (light blue points) in a skew unit cell. Triply-periodic potential is shown on a slice.
 Red points show the auxiliary source points outside the unit cell,
 dark blue the surface collocation points, and the six faces are named
-(with normals in light blue).](perilap3d2cut.png "test")
+(with normals in light blue)")
 
 This python/numba library computes the potential and fields at a set
 of targets inside a given general unit cell, due to a
