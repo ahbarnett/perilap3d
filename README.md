@@ -8,7 +8,7 @@ Author: Alex H Barnett
 Triply-periodic potential is shown on a slice.
 Red points show the auxiliary source points outside the unit cell,
 dark blue the surface collocation points, and the six faces are named
-(with normals in light blue).](perilap3d2cut.png)
+(with normals in light blue).](perilap3d2cut.png "test")
 
 This python/numba library computes the potential and fields at a set
 of targets inside a given general unit cell, due to a
