@@ -4,10 +4,18 @@ version 0.6,  9/14/18
 
 Author: Alex H Barnett
 
+![perilap3d demo for self-interaction of 1000 sources (light blue points) in a skew unit cell.
+Triply-periodic potential is shown on a slice.
+Red points show the auxiliary source points outside the unit cell,
+dark blue the surface collocation points, and the six faces are named
+(with normals in light blue).](perilap3d2cut.png)
+
 This python/numba library computes the potential and fields at a set
 of targets inside a given general unit cell, due to a
 triply-periodized set of dipoles in the unit cell, to a requested
-accuracy tolerance. The unit cell is general (described by three
+accuracy tolerance.
+The applications include molecular dynamics and density functional theory in crystals.
+The parallelepiped unit cell is general (described by three
 lattice vectors), although currently it may not have high aspect
 ratio.  Potentials and fields are also available at the sources
 themselves, where the self-interaction (_j_=_i_) is excluded from the

@@ -317,8 +317,8 @@ def test_lap3dcharge():
     gradf = lambda x: lap3dcharge_native(y,q,x.T,ifgrad=True)[1].ravel()
     print('test_lap3dcharge: grad check (native): ', checkgrad(x,f,gradf))
     # perf tests...
-    ns = 1000                    # sources
-    nt = 2000                    # targs (check rect case)
+    ns = 2000                    # sources
+    nt = 1000                    # targs (check rect case)
     y = random.rand(ns,3)     # sources in [0,1]^3
     q = random.randn(ns)      # charges
     x = random.rand(nt,3)     # targs
