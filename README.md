@@ -76,9 +76,11 @@ See `perilap3d.py` test codes for more examples.
 
 ### To Do
 
-* add charge sources
+* add quadrupole sources and Hessian outputs
 
-* spherical harmonics (or better) for aux rep for rapid empty BVP solve
+* add charge sources, via uniform face leakage generalized Greens function
+
+* spherical harmonics (or better?) for aux rep for rapid empty BVP solve
 
 * fix fat Q case with QR solve? (only needed if m<P)
 
@@ -93,7 +95,7 @@ See `perilap3d.py` test codes for more examples.
 
 _A unified integral equation scheme for doubly-periodic Laplace and Stokes boundary value problems in two dimensions_,
 Alex H. Barnett, Gary Marple, Shravan Veerapaneni, Lin Zhao,
-_in press, Comm. Pure Appl. Math._ (2018).
+_Comm. Pure Appl. Math._ *71*(11), 2334-2380 (2018).
 `http://arxiv.org/abs/1611.08038`
 
 * For a recent use of this idea in 3D cubic unit cells combining with the FMM
