@@ -6,6 +6,7 @@ import numpy as np
 from numpy import array,zeros,ones,eye,empty,random
 from numpy.linalg import norm,cond
 import numba
+import numexpr as ne
 from time import perf_counter as tic
 
 def lap3dcharge_native(y,q,x,ifgrad=False):
@@ -227,6 +228,42 @@ def lap3dchargemat_numba(y,x,e,A,An):
             A[i,j] = prefac / r
             An[i,j] = -prefac * edotR / (r2*r)
 
+def lap3dchargemat_ne(y,x,e,A,An):
+    """Fill dense matrix for pot & direc-grad of 3D Laplace charges, non-self.
+    numexpr.
+    Inputs:
+    y - ns*3 source locs
+    x - nt*3 target locs
+    e - nt*3 target normals (ought to be unit)
+    Outputs: (must be preallocated, both filled for now)
+    A - nt*ns matrix mapping source charges to target pots
+    An - nt*ns matrix mapping source charges to target normal-grads
+    See lap3ddipole_native for math definitions.
+    """
+    y = np.atleast_2d(y)     # handle ns=1 case: make 1x3 not 3-vecs
+    x = np.atleast_2d(x)
+    e = np.atleast_2d(e)
+    ns = y.shape[0]
+    nt = x.shape[0]
+    assert(A.shape==(nt,ns))
+    assert(An.shape==(nt,ns))
+    x0 = x[:,0][:,None]
+    x1 = x[:,1][:,None]
+    x2 = x[:,2][:,None]
+    n0 = e[:,0][:,None]
+    n1 = e[:,1][:,None]
+    n2 = e[:,2][:,None]
+    y0 = y[:,0]
+    y1 = y[:,1]
+    y2 = y[:,2]
+    d0 = ne.evaluate('x0 - y0')  # outer, displ mats x-y
+    d1 = ne.evaluate('x1 - y1')
+    d2 = ne.evaluate('x2 - y2')
+    ir = ne.evaluate('1/sqrt(d0**2 + d1**2 + d2**2)')
+    prefac = 1.0/(4.0*np.pi)
+    ne.evaluate('prefac*ir',out=A)    # writes into A, not creates new symbol
+    ne.evaluate('-prefac*(d0*n0 + d1*n1 + d2*n2)*(ir*ir*ir)',out=An)
+
 @numba.njit(parallel=True,fastmath=True)
 def lap3ddipolemat_numba(y,d,x,e,A,An):
     """Fill dense matrix for pot & direc-grad of 3D Laplace dipoles, non-self.
@@ -263,6 +300,50 @@ def lap3ddipolemat_numba(y,d,x,e,A,An):
             edotR = R0*e[i,0]+R1*e[i,1]+R2*e[i,2]
             A[i,j] = ddotR * pir3
             An[i,j] = (ddote - 3*ddotR*edotR/r2) * pir3
+            
+def lap3ddipolemat_ne(y,d,x,e,A,An):
+    """Fill dense matrix for pot & direc-grad of 3D Laplace dipoles, non-self.
+    nunexpr.
+    Inputs:
+    y - ns*3 source locs
+    d - ns*3 src dipole directions (ought to be unit)
+    x - nt*3 target locs
+    e - nt*3 target normals (ought to be unit)
+    Outputs: (must be preallocated)
+    A - nt*ns matrix mapping source dipole strengths to target pots
+    An - nt*ns matrix mapping source dipole strengths to target normal-grads
+    See lap3ddipole_native for math definitions.
+    """
+    y = np.atleast_2d(y)     # handle ns=1 case: make 1x3 not 3-vecs
+    d = np.atleast_2d(d)
+    x = np.atleast_2d(x)
+    e = np.atleast_2d(e)
+    ns = y.shape[0]
+    nt = x.shape[0]
+    assert(A.shape==(nt,ns))
+    assert(An.shape==(nt,ns))
+    x0 = x[:,0][:,None]       # make col vecs for numexpr
+    x1 = x[:,1][:,None]
+    x2 = x[:,2][:,None]
+    n0 = e[:,0][:,None]
+    n1 = e[:,1][:,None]
+    n2 = e[:,2][:,None]
+    y0 = y[:,0]
+    y1 = y[:,1]
+    y2 = y[:,2]
+    d0 = d[:,0]
+    d1 = d[:,1]
+    d2 = d[:,2]
+    R0 = ne.evaluate('x0 - y0')  # outer, displ mats x-y
+    R1 = ne.evaluate('x1 - y1')
+    R2 = ne.evaluate('x2 - y2')
+    # this is all slow I assume because of passing over RAM too many times...
+    ir = ne.evaluate('1/sqrt(R0**2 + R1**2 + R2**2)')
+    prefac = 1.0/(4.0*np.pi)
+    ddotR = ne.evaluate('R0*d0 + R1*d1 + R2*d2')
+    pir3 = ne.evaluate('prefac*(ir*ir*ir)')
+    ne.evaluate('ddotR*pir3',out=A)
+    ne.evaluate('((d0*n0 + d1*n1 + d2*n2) - 3*(ddotR*(n0*R0+n1*R1+n2*R2))*(ir*ir))*pir3',out=An)
 
 @numba.njit(parallel=True,fastmath=True)
 def lap3ddipoleself_numba(y,d,pot,grad,add=False):
@@ -385,6 +466,8 @@ def test_lap3ddipole():
 
 def test_lap3dmats():
     """test the matrix fillers match the native evaluator answers.
+    Also tests timing. Conclusion: numba can fill around 1e9 els/sec but
+    numexpr is 4x slower, at least on i7.
     """
     ns = 5000                    # sources
     y = random.rand(ns,3)     # sources in [0,1]^3
@@ -395,33 +478,35 @@ def test_lap3dmats():
     e = random.randn(nt,3)    # targ normals (ought to be unit len)
     u = zeros(nt)             # true pot and grad outputs
     g = zeros([nt,3])
-    # charge (monopole)...
-    lap3dcharge_numba(y,q,x,u,g)
-    A = zeros([nt,ns]); An = zeros([nt,ns]);  # alloc mats
-    t0=tic()
-    lap3dchargemat_numba(y,x,e,A,An)
-    t = tic()-t0
-    print("chg mats fill:  two %d*%d mats in %.3g s: %.3g Gels/s" % (nt,ns,t,2*ns*nt/t/1e9))
-    t0 = tic()
-    ufrommat = A @ q[:,None]
-    t = tic()-t0
-    print("matvec: %.3g s: %.3g Gops/s" % (t,ns*nt/t/1e9))
-    print('chg mat pot err nrm = ', norm(u[:,None] - ufrommat))  # u make col vec!
-    gfrommat = An @ q[:,None]
-    gdote = np.sum(g*e,axis=1)[:,None]   # e-direc derivs
-    print('chg mat n-grad err nrm = ', norm(gdote - gfrommat))
-    # dipole...
-    lap3ddipole_numba(y,d,x,u,g)
-    A = zeros([nt,ns]); An = zeros([nt,ns]);  # alloc mats
-    t0=tic()
-    lap3ddipolemat_numba(y,d,x,e,A,An)
-    t = tic()-t0
-    print("dip mats fill:  two %d*%d mats in %.3g s: %.3g Gels/s" % (nt,ns,t,2*ns*nt/t/1e9))
-    ufrommat = A @ np.ones([ns,1])   # pot from unit dipstrs
-    print('dip mat pot err nrm = ', norm(u[:,None] - ufrommat))
-    gfrommat = An @ np.ones([ns,1])   # grad from unit dipstrs
-    gdote = np.sum(g*e,axis=1)[:,None]   # e-direc derivs
-    print('dip mat n-grad err nrm = ', norm(gdote - gfrommat),'\n')
+    for meth in range(2):
+        print("meth=numba:" if meth==0 else "meth=numexpr:")
+        # charge (monopole)...
+        lap3dcharge_numba(y,q,x,u,g)
+        A = zeros([nt,ns]); An = zeros([nt,ns]);  # alloc mats
+        t0=tic()
+        lap3dchargemat_numba(y,x,e,A,An) if meth==0 else lap3dchargemat_ne(y,x,e,A,An)
+        t = tic()-t0
+        print("chg mats fill:  two %d*%d mats in %.3g s: %.3g Gels/s" % (nt,ns,t,2*ns*nt/t/1e9))
+        t0 = tic()
+        ufrommat = A @ q[:,None]
+        t = tic()-t0
+        print("matvec: %.3g s: %.3g Gops/s" % (t,ns*nt/t/1e9))
+        print('chg mat pot err nrm = ', norm(u[:,None] - ufrommat))  # u make col vec!
+        gfrommat = An @ q[:,None]
+        gdote = np.sum(g*e,axis=1)[:,None]   # e-direc derivs
+        print('chg mat n-grad err nrm = ', norm(gdote - gfrommat))
+        # dipole...
+        lap3ddipole_numba(y,d,x,u,g)
+        A = zeros([nt,ns]); An = zeros([nt,ns]);  # alloc mats
+        t0=tic()
+        lap3ddipolemat_numba(y,d,x,e,A,An) if meth==0 else lap3ddipolemat_ne(y,d,x,e,A,An)
+        t = tic()-t0
+        print("dip mats fill:  two %d*%d mats in %.3g s: %.3g Gels/s" % (nt,ns,t,2*ns*nt/t/1e9))
+        ufrommat = A @ np.ones([ns,1])   # pot from unit dipstrs
+        print('dip mat pot err nrm = ', norm(u[:,None] - ufrommat))
+        gfrommat = An @ np.ones([ns,1])   # grad from unit dipstrs
+        gdote = np.sum(g*e,axis=1)[:,None]   # e-direc derivs
+        print('dip mat n-grad err nrm = ', norm(gdote - gfrommat),'\n')
 
 def checkgrad(x,f,Df):
     """
