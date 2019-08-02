@@ -386,11 +386,11 @@ def test_lap3ddipole():
 def test_lap3dmats():
     """test the matrix fillers match the native evaluator answers.
     """
-    ns = 1000                    # sources
+    ns = 5000                    # sources
     y = random.rand(ns,3)     # sources in [0,1]^3
     d = random.randn(ns,3)    # strength vectors (ought to be unit len)
     q = random.randn(ns)      # charges
-    nt = 2000                    # targs (check rect case)
+    nt = 10000                    # targs (check rect case)
     x = random.rand(nt,3)     # targs
     e = random.randn(nt,3)    # targ normals (ought to be unit len)
     u = zeros(nt)             # true pot and grad outputs
