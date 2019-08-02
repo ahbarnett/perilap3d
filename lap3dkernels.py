@@ -386,11 +386,11 @@ def test_lap3ddipole():
 def test_lap3dmats():
     """test the matrix fillers match the native evaluator answers.
     """
-    ns = 1                    # sources
+    ns = 1000                    # sources
     y = random.rand(ns,3)     # sources in [0,1]^3
     d = random.randn(ns,3)    # strength vectors (ought to be unit len)
     q = random.randn(ns)      # charges
-    nt = 2                    # targs (check rect case)
+    nt = 2000                    # targs (check rect case)
     x = random.rand(nt,3)     # targs
     e = random.randn(nt,3)    # targ normals (ought to be unit len)
     u = zeros(nt)             # true pot and grad outputs
@@ -398,8 +398,14 @@ def test_lap3dmats():
     # charge (monopole)...
     lap3dcharge_numba(y,q,x,u,g)
     A = zeros([nt,ns]); An = zeros([nt,ns]);  # alloc mats
+    t0=tic()
     lap3dchargemat_numba(y,x,e,A,An)
+    t = tic()-t0
+    print("chg mats fill:  two %d*%d mats in %.3g s: %.3g Gels/s" % (ns,nt,t,2*ns*nt/t/1e9))
+    t0 = tic()
     ufrommat = A @ q[:,None]
+    t = tic()-t0
+    print("matvec: %.3g s: %.3g Gops/s" % (t,ns*nt/t/1e9))
     print('chg mat pot err nrm = ', norm(u[:,None] - ufrommat))  # u make col vec!
     gfrommat = An @ q[:,None]
     gdote = np.sum(g*e,axis=1)[:,None]   # e-direc derivs
@@ -407,7 +413,10 @@ def test_lap3dmats():
     # dipole...
     lap3ddipole_numba(y,d,x,u,g)
     A = zeros([nt,ns]); An = zeros([nt,ns]);  # alloc mats
+    t0=tic()
     lap3ddipolemat_numba(y,d,x,e,A,An)
+    t = tic()-t0
+    print("dip mats fill:  two %d*%d mats in %.3g s: %.3g Gels/s" % (ns,nt,t,2*ns*nt/t/1e9))
     ufrommat = A @ np.ones([ns,1])   # pot from unit dipstrs
     print('dip mat pot err nrm = ', norm(u[:,None] - ufrommat))
     gfrommat = An @ np.ones([ns,1])   # grad from unit dipstrs
