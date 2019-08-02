@@ -401,7 +401,7 @@ def test_lap3dmats():
     t0=tic()
     lap3dchargemat_numba(y,x,e,A,An)
     t = tic()-t0
-    print("chg mats fill:  two %d*%d mats in %.3g s: %.3g Gels/s" % (ns,nt,t,2*ns*nt/t/1e9))
+    print("chg mats fill:  two %d*%d mats in %.3g s: %.3g Gels/s" % (nt,ns,t,2*ns*nt/t/1e9))
     t0 = tic()
     ufrommat = A @ q[:,None]
     t = tic()-t0
@@ -416,7 +416,7 @@ def test_lap3dmats():
     t0=tic()
     lap3ddipolemat_numba(y,d,x,e,A,An)
     t = tic()-t0
-    print("dip mats fill:  two %d*%d mats in %.3g s: %.3g Gels/s" % (ns,nt,t,2*ns*nt/t/1e9))
+    print("dip mats fill:  two %d*%d mats in %.3g s: %.3g Gels/s" % (nt,ns,t,2*ns*nt/t/1e9))
     ufrommat = A @ np.ones([ns,1])   # pot from unit dipstrs
     print('dip mat pot err nrm = ', norm(u[:,None] - ufrommat))
     gfrommat = An @ np.ones([ns,1])   # grad from unit dipstrs
