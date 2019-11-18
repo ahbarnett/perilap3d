@@ -345,6 +345,37 @@ def lap3ddipolemat_ne(y,d,x,e,A,An):
     ne.evaluate('ddotR*pir3',out=A)
     ne.evaluate('((d0*n0 + d1*n1 + d2*n2) - 3*(ddotR*(n0*R0+n1*R1+n2*R2))*(ir*ir))*pir3',out=An)
 
+@numba.njit(parallel=True,fastmath=True)   # recompiles every run, slow
+def lap3dchargeself_numba(y,q,pot,grad,add=False):
+    """evaluate pot & grad of 3D Laplace charges, self (j!=i), naive sum,
+    numba jit. Writes into pot and grad.
+    See lap3dcharge_native.
+    Optional input: add - if True, add to what's in pot,grad; False overwrite.
+    pot,grad passed in since njit fails with internal pot=zeros(nt)
+    """
+    if y.ndim==1:          # n=1, no self-int, no need for atleast_2d
+        return
+    n = y.shape[0]
+    assert(pot.shape==(n,))
+    assert(grad.shape==(n,3))
+    prefac = 1.0/(4.0*np.pi)
+    for i in numba.prange(n):    # loop over targs
+        if not add:
+            pot[i] = grad[i,0] = grad[i,1] = grad[i,2] = 0.0
+        for j in range(n):
+            if j!=i:       # same speed as splitting to explicit j<i, j>i cases
+                R0 = y[i,0]-y[j,0]
+                R1 = y[i,1]-y[j,1]
+                R2 = y[i,2]-y[j,2]
+                r2 = R0**2+R1**2+R2**2
+                r = np.sqrt(r2)
+                pqj = prefac*q[j]
+                pot[i] += pqj / r
+                pqjir3 = pqj / (r*r2)
+                grad[i,0] -= R0 * pqjir3
+                grad[i,1] -= R1 * pqjir3
+                grad[i,2] -= R2 * pqjir3
+
 @numba.njit(parallel=True,fastmath=True)
 def lap3ddipoleself_numba(y,d,pot,grad,add=False):
     """evaluate pot & grad of 3D Laplace dipoles, self (j!=i), naive sum,

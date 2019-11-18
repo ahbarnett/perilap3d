@@ -1,5 +1,5 @@
 # 3D electrostatic triply-periodic dipole sum. python module, w/ numpy+numba.
-# Alex Barnett, Sept 2018. Potential collab w/ Gabor Csanyi.
+# Alex Barnett, Sept 2018 onwards. Potential (haha) collab w/ Gabor Csanyi.
 
 import numpy as np
 from numpy import array,zeros,ones,eye,empty,random
@@ -191,7 +191,7 @@ class lap3d3p:
 
     # uncomment following line only for line_profiler via kernprof...
     #@profile
-    def eval(self,y,d,x=None,ifsrc=False,verb=0):
+    def eval(self,y,d,x=None,c=None,ifsrc=False,verb=0):
         """Evaluate triply-periodic Laplace 3D dipole sum at sources y (omitting
         self-interaction j=i), new targets x (distinct from sources), or both.
 
@@ -199,9 +199,10 @@ class lap3d3p:
 
         Inputs:
           y (ns*3 float) - sources
-          d (ns*3 float) - source dipole strength vectors
+          d (ns*3 float) - source dipole strength vectors (or None)
         Optional inputs:
           x (nt*3 float) - new target points. If absent, ifsrc=True is set.
+          c (ns float) - source charge strengths (must sum to zero; or None)
           ifsrc (bool) - whether to self-evaluate at the sources
           verb (integer) - verbosity: 0 silent, 1 text, 2 and figs,...
 
@@ -218,22 +219,25 @@ class lap3d3p:
           pott (nt float) - potentials at targets
           gradt (nt*3 float) - gradients (negative of E field) at targets
 
-        Issues: * not sure if most elegant output format.
+        Issues: * not sure if the most elegant output format.
                 * all the lap3d eval calls in here could be switchable to FMM.
         """
-        Ns=y.shape[0]        # num srcs
         iftarg = (x is not None)
         if iftarg:
             Nt=x.shape[0]    # num targs
         else:
             ifsrc=True       # override: if no targs, presume you want src eval!
             Nt = 0
+        Ns=y.shape[0]        # num srcs
+        ifchg = (c is not None)
+        ifdip = (d is not None)
         if verb:
-            print('eval: ifsrc=%d, iftarg=%d'%(ifsrc,iftarg))
+            print('eval: ifsrc=%d, iftarg=%d, ifchg=%d, ifdip=%d'%(ifsrc,iftarg,ifchg,ifdip))
         t1=tic() # sum all near images of sources, to the targets:
         y0 = y.dot(self.ilat)   # srcs xformed back as if std UC [-1/2,1/2]^3
         ynr = zeros([0,3])   # all nr srcs, or use list for faster append?
-        dnr = zeros([0,3])   # all nr src strength vecs
+        dnr = zeros([0,3])   # all nr dip strength vecs
+        cnr = zeros([0])     # all nr chg strengths
         # build all near source images, excluding original ones...
         for i in range(-1,2):
             for j in range(-1,2):
@@ -243,23 +247,36 @@ class lap3d3p:
                         y0tr = y0 + ijk              # broadcast, transl srcs
                         ii = np.max(np.abs(y0tr),axis=1) < (1/2+self.gap) # near?
                         ynr = np.vstack([ynr, y[ii,:] + ijk.dot(self.lat)])
-                        dnr = np.vstack([dnr, d[ii,:]])
+                        if ifchg:
+                            cnr = np.hstack([cnr, c[ii]])   # since 1d array
+                        if ifdip:
+                            dnr = np.vstack([dnr, d[ii,:]]) # 3-by-* arrays
         if ifsrc:
             pot = 0*y[:,0]; grad = 0*y     # alloc src field output arrays
-            l3k.lap3ddipole_numba(ynr,dnr,y,pot,grad)  # direct non-self near
-            l3k.lap3ddipoleself_numba(y,d,pot,grad,add=True)  # nr src self-int
+            if ifchg:
+                l3k.lap3dcharge_numba(ynr,cnr,y,pot,grad)  # dir non-self near
+                l3k.lap3dchargeself_numba(y,c,pot,grad,add=True)  # nr src self
+            if ifdip:
+                l3k.lap3ddipole_numba(ynr,dnr,y,pot,grad,add=True)
+                l3k.lap3ddipoleself_numba(y,d,pot,grad,add=True)
         ynr = np.vstack([ynr, y])          # append original srcs to list
-        dnr = np.vstack([dnr, d])
+        if ifchg:
+            cnr = np.hstack([cnr, c])
+        if ifdip:
+            dnr = np.vstack([dnr, d])
         if iftarg:
             pott = 0*x[:,0]; gradt = 0*x     # alloc targ output arrays
             # NB stacking nr srcs w/ single call here good if # targs big...
-            l3k.lap3ddipole_numba(ynr,dnr,x,pott,gradt)  # eval direct near sum
+            if ifchg:
+                l3k.lap3dcharge_numba(ynr,cnr,x,pott,gradt)  # eval dir near sum
+            if ifdip:
+                l3k.lap3ddipole_numba(ynr,dnr,x,pott,gradt,add=True)
             
         if verb:
             print('eval nt=%d, ns=%d: %d near src, time\t%.3g ms' %
                   (Nt,Ns,ynr.shape[0],1e3*(tic()-t1)))
         
-        # compute discrepancy of near source (always dipole) images on UC faces
+        # compute discrepancy of near source (chg, dip) images on UC faces
         t0=tic()
         ynr0 = ynr.dot(self.ilat)  # hack to get all nr src as if std UC (fast)
         discrep = array([])        # length-0 row vec
@@ -268,10 +285,16 @@ class lap3d3p:
         gf = np.empty([m2,3])      # grad "
         for f in range(3):                    # xyz face directions
             ii = ynr0[:,f] > (-1/2+self.gap)  # nr srcs "gap-far" from -ve face?
-            l3k.lap3ddipole_numba(ynr[ii],dnr[ii],self.c[f,0,:,:],df,gf)
+            if ifchg:
+                l3k.lap3dcharge_numba(ynr[ii],cnr[ii],self.c[f,0,:,:],df,gf)
+            if ifdip:
+                l3k.lap3ddipole_numba(ynr[ii],dnr[ii],self.c[f,0,:,:],df,gf,add=True)
             df = -df; gf = -gf                         # sign for -ve face
             ii = ynr0[:,f] < (1/2-self.gap)   # nr srcs "gap-far" from +ve face?
-            l3k.lap3ddipole_numba(ynr[ii],dnr[ii],self.c[f,1,:,:],df,gf,add=True)
+            if ifchg:
+                l3k.lap3dcharge_numba(ynr[ii],cnr[ii],self.c[f,1,:,:],df,gf,add=True)
+            if ifdip:
+                l3k.lap3ddipole_numba(ynr[ii],dnr[ii],self.c[f,1,:,:],df,gf,add=True)
             dnf = np.sum(self.cn[f,0,:,:]*gf,axis=1)   # n-deriv = grad dot nor
             discrep = np.hstack([discrep,df,dnf])
         if verb:

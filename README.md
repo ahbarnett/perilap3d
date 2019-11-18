@@ -1,6 +1,6 @@
 # perilap3d: triply periodic electrostatic kernels for general unit cell
 
-version 0.6,  9/14/18
+version 0.7 (11/17/19)
 
 Author: Alex H Barnett
 
@@ -12,17 +12,25 @@ dark blue the surface collocation points, and the six faces are named
 
 This python/numba library computes the potential and fields at a set
 of targets inside a given general unit cell, due to a
-triply-periodized set of dipoles in the unit cell, to a requested
-accuracy tolerance.
+triply-periodized set of charges (which must sum to zero) and dipoles
+in the unit cell, to a requested accuracy tolerance.
 The applications include molecular dynamics and density functional theory in crystals.
 The parallelepiped unit cell is general (described by three
 lattice vectors), although currently it may not have high aspect
 ratio.  Potentials and fields are also available at the sources
 themselves, where the self-interaction (_j_=_i_) is excluded from the
-sum.  The scheme uses direct near-image sums plus solution of the
-empty "discrepancy" BVP via an auxiliary proxy point (method of fundamental
-solutions or MFS) representation.  It is compatible with the fast multipole
-method (FMM), although currently only direct summation is used.
+sum.
+Instead of the usual idea of handling summation over the infinite lattice,
+the problem is solved as a PDE with periodic (hence nonlocal) boundary
+conditions.
+In particular, it writes the potential as a direct sum over only the given
+charges/dipoles and their near images, plus a smooth solution to the Laplace
+equation with inhomogeneous periodic BCs.
+The latter BVP solve is done to high accuracy via an
+auxiliary proxy point (method of fundamental
+solutions or MFS) representation.  The whole scheme is
+compatible with the fast multipole
+method (FMM), although currently only plain direct summation is used.
 
 For _N_ sources and targets, where the nonperiodic direct evaluation
 cost is _N_<sup>2</sup>,
@@ -72,13 +80,16 @@ pot,grad = p.eval(y,d)                # grad contains negatives of E field
 ```
 The first call to `eval` after importing will require a few seconds to jit-compile the numba code. With this done, the above `eval` call takes 11 ms on an i7.
 
-See `perilap3d.py` test codes for more examples.
+For another simple example, see `madelung.py` which computes the Madelung
+constant 1.74756459463318... for the cubic NaCl
+lattice to 15-digit accuracy in 3 ms (after
+a lattice-dependent setup time of 0.2 s).
+
+See the test codes in `perilap3d.py` for more usage examples.
 
 ### To Do
 
 * add quadrupole sources and Hessian outputs
-
-* add charge sources, via uniform face leakage generalized Greens function
 
 * spherical harmonics (or better?) for aux rep for rapid empty BVP solve
 
@@ -107,3 +118,15 @@ Multipole-To-Local operator approach_,
 Wen Yan and Michael Shelley,
 _J. Comput. Phys._ *355*, 214-232 (2018).
 `http://arxiv.org/abs/1705.02043`
+
+* For an accurate value of the Madelung constant and a very advanced way to
+compute it, see:
+
+_Ten problems in experimental mathematics_,
+David H. Bailey, Jonathan M. Borwein, Vishaal Kapoor, and Eric W. Weisstein,
+_Amer. Math. Monthly_ *113*(6), 481-509 (2006).
+
+### Changelog
+
+version 0.6,  9/14/18, dipoles only
+version 0.7   11/17/19, charges added & Madelung example
