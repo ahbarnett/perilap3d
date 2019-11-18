@@ -201,8 +201,8 @@ class lap3d3p:
           y (ns*3 float) - sources
           d (ns*3 float) - source dipole strength vectors (or None)
         Optional inputs:
-          x (nt*3 float) - new target points. If absent, ifsrc=True is set.
-          c (ns float) - source charge strengths (must sum to zero; or None)
+          x (nt*3 float) - new target points. If absent/None, ifsrc=True is set
+          c (ns float) - source charge strengths (must sum to zero)
           ifsrc (bool) - whether to self-evaluate at the sources
           verb (integer) - verbosity: 0 silent, 1 text, 2 and figs,...
 
@@ -281,12 +281,12 @@ class lap3d3p:
         ynr0 = ynr.dot(self.ilat)  # hack to get all nr src as if std UC (fast)
         discrep = array([])        # length-0 row vec
         m2=self.m**2               # colloc pts per face
-        df = np.empty(m2)          # val discrep on a face pair
-        gf = np.empty([m2,3])      # grad "
         for f in range(3):                    # xyz face directions
             ii = ynr0[:,f] > (-1/2+self.gap)  # nr srcs "gap-far" from -ve face?
+            df = np.zeros(m2)          # initialize val discrep on a face pair
+            gf = np.zeros([m2,3])      #            grad "
             if ifchg:
-                l3k.lap3dcharge_numba(ynr[ii],cnr[ii],self.c[f,0,:,:],df,gf)
+                l3k.lap3dcharge_numba(ynr[ii],cnr[ii],self.c[f,0,:,:],df,gf,add=True)
             if ifdip:
                 l3k.lap3ddipole_numba(ynr[ii],dnr[ii],self.c[f,0,:,:],df,gf,add=True)
             df = -df; gf = -gf                         # sign for -ve face
@@ -365,13 +365,15 @@ def test_lap3d3p(tol=1e-3,verb=1,gamma=None):
     ns = 500                      # sources
     y = (random.rand(ns,3)-1/2).dot(L)    # in [-1/2,1/2]^3 then xform to latt
     d = random.randn(ns,3)        # dipole strength vectors
+    c = random.randn(ns)          # charge strengths
+    c -= np.mean(c)               # (must sum to 0)
     x = (random.rand(ns,3)-1/2).dot(L)   # same num of new targets
     # change the first 8 targs to the corners, to check periodicity...
     x[0:8,:] = (np.vstack([zeros(3),eye(3),1-eye(3),ones(3)]) - 1/2).dot(L)
     reps=10       # time the eval (jits have been warmed up)...
     t0=tic()
     for i in range(reps):
-        u,g = p.eval(y,d,x)
+        u,g = p.eval(y,d,x,c)
     teval=(tic()-t0)/reps
     print('3d3p eval time = %.3g ms'%(1e3*teval))
     #print(u[0:8])     # peri-checking pot vals - NB arbitrary constant offset
@@ -406,13 +408,15 @@ def test_conv_lap3d3p():
     # a rand y is flawed since if two come close, makes rel err too good...
     y = (random.rand(ns,3)-1/2).dot(L)    # in [-1/2,1/2]^3 then xform to latt
     d = random.randn(ns,3)        # dipole strength vectors
+    c = random.randn(ns)          # charge strengths
+    c -= np.mean(c)               # (must sum to 0)
     tols = 10.0**-np.arange(2,12,2)
     n = tols.size
     gg = zeros([n,ns,3])       # store all grad outputs
     for i in range(n):
         print('eval at tol=%.3g...'%(tols[i]))
         p.precomp(tol=tols[i],verb=1)
-        u,gg[i] = p.eval(y,d)
+        u,gg[i] = p.eval(y,d,None,c)  # just self-eval (x=None)
         print('\tgrad at first src:',gg[i][0])
     gnrm = norm(gg[n-1],ord='fro')    # l2 norm of all field cmpnts, most acc
     #print('norm g:',gnrm)
