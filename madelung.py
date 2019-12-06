@@ -17,7 +17,7 @@ p.precomp(tol=1e-12,verb=0)           # do expensive precomputation (0.2 sec)
 y = array([[1,1,1],[1,1,-1],[1,-1,1],[1,-1,-1],[-1,1,1],[-1,1,-1],[-1,-1,1],[-1,-1,-1]])               # the eight NaCl atoms in unit cell side-length 4
 c = prod(y,1)                         # their charges alternate (-1)^{i+j+k}
 y = y/4                               # rescale for side length 1
-pot,grad = p.eval(y,None,None,c)      # charges (no dipoles), self only
+pot,grad = p.eval(y,None,None,c)      # charges (no dipoles), self only  (3 ms)
 
 # extract Madelung const (note overall pot const is arb for periodic solve)...
 v = (pot[1]-pot[0])/2                 # half the pot diff btw Na and Cl locs

@@ -129,5 +129,5 @@ _Amer. Math. Monthly_ *113*(6), 481-509 (2006).
 
 ### Changelog
 
-version 0.6,  9/14/18, dipoles only
-version 0.7   11/17/19, charges added & Madelung example
+version 0.6,  9/14/18, dipoles only  
+version 0.7   11/17/19, charges added & Madelung example  
